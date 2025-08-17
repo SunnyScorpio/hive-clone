@@ -12,7 +12,7 @@ This version demonstrates:
 mkdir build && cd build
 cmake ..
 cmake --build . -j
-
+```
 
 Disclaimer
 This project is an unofficial, open-source implementation of the rules of the board game Hive, created by John Yianni and published by Gen42 Games.
