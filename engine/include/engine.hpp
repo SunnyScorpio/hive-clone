@@ -16,7 +16,6 @@ namespace hive {
 
     struct AxialHash {
         size_t operator()(const Axial& a) const noexcept {
-            // 64-bit mix (good enough for small game state maps)
             return (static_cast<uint64_t>(static_cast<uint32_t>(a.q)) * 0x9e3779b97f4a7c15ULL) ^
                 (static_cast<uint64_t>(static_cast<uint32_t>(a.r)) + 0x9e3779b97f4a7c15ULL);
         }
@@ -31,8 +30,8 @@ namespace hive {
     struct Piece {
         int id{}; Bug bug{}; Color color{};
         bool onBoard{ false };
-        Axial pos{}; // valid iff onBoard
-        int height{ 0 }; // 0 = ground
+        Axial pos{};
+        int height{ 0 };
     };
 
     struct Move {
@@ -42,12 +41,9 @@ namespace hive {
     class GameState {
     public:
         GameState();
-
-        // minimal API for the desktop viewer
         const std::vector<Piece>& pieces() const { return pieces_; }
         const std::unordered_map<Axial, std::vector<int>, AxialHash>& board() const { return board_; }
 
-        // demo helpers
         int addDemoPiece(Bug bug, Color color, Axial at, int height = 0);
         void movePiece(int pieceId, Axial to, bool allowStack = true);
 
@@ -56,7 +52,6 @@ namespace hive {
         std::vector<Piece> pieces_;
     };
 
-    // Geometry helpers for rendering
     struct Pixel { float x{}, y{}; };
     Pixel axialToPixel(Axial a, float hexSize);
 
