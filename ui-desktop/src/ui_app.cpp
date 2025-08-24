@@ -1,6 +1,7 @@
 #include "ui_app.hpp"
 #include <cmath>
 #include <numbers>
+#include <algorithm>
 
 using namespace hive;
 
@@ -8,8 +9,8 @@ using namespace hive;
 sf::ConvexShape UIApp::makeHex(float size) {
     sf::ConvexShape hex; hex.setPointCount(6);
     for (int i = 0; i < 6; ++i) {
-        float angle = static_cast<float>(std::numbers::pi) / 180.0f * (60.0f * i - 30.0f);
-        hex.setPoint(i, sf::Vector2f(std::cos(angle) * size, std::sin(angle) * size));
+        float angle = static_cast<float>(std::numbers::pi) / 180.0f * (60.0f * static_cast<float>(i) - 30.0f);
+        hex.setPoint(i, sf::Vector2f(static_cast<float>(std::cos(angle) * size), static_cast<float>(std::sin(angle) * size)));
     }
     hex.setOutlineThickness(3.0f); // thicker outlines
     hex.setOutlineColor(sf::Color::Black);
@@ -25,7 +26,7 @@ hive::Axial UIApp::pixelToAxial(sf::Vector2f p, float s) {
     float r = (2.0f / 3.0f) * (p.y / s);
     // cube round
     float x = q, z = r, y = -x - z;
-    float rx = std::round(x), ry = std::round(y), rz = std::round(z);
+    float rx = static_cast<float>(std::round(x)), ry = static_cast<float>(std::round(y)), rz = static_cast<float>(std::round(z));
     float x_diff = std::fabs(rx - x);
     float y_diff = std::fabs(ry - y);
     float z_diff = std::fabs(rz - z);
@@ -35,7 +36,7 @@ hive::Axial UIApp::pixelToAxial(sf::Vector2f p, float s) {
     return cubeToAxial(rx, rz);
 }
 
-UIApp::UIApp() : window_(sf::VideoMode(1024, 768), "Hive (Desktop) – Kickstart", sf::Style::Default, sf::ContextSettings(0, 0, 8)) {
+UIApp::UIApp() : window_(sf::VideoMode(1024, 768), "Hive (Desktop) – Kickstart", sf::Style::Default, sf::ContextSettings(0u, 0u, 8u)) {
     // Enable anti-aliasing with 8x samples
     window_.setFramerateLimit(60);
 
@@ -46,7 +47,7 @@ UIApp::UIApp() : window_(sf::VideoMode(1024, 768), "Hive (Desktop) – Kickstart",
     state_.addDemoPiece(Bug::Grasshopper, Color::White, { -1,1 });
 
     fontOk_ = font_.loadFromFile("assets/DejaVuSans.ttf");
-    offset_ = { 512, 384 };
+    offset_ = sf::Vector2f(512.f, 384.f);
 }
 
 void UIApp::run() {
@@ -61,13 +62,18 @@ void UIApp::handleEvents() {
     sf::Event e;
     while (window_.pollEvent(e)) {
         if (e.type == sf::Event::Closed) window_.close();
+        if (e.type == sf::Event::MouseLeft) { hoverAx_.reset(); }
+        if (e.type == sf::Event::LostFocus) { hoverAx_.reset(); }
+
         if (e.type == sf::Event::MouseWheelScrolled) {
             float dz = e.mouseWheelScroll.delta;
             hexSize_ = std::max(10.0f, std::min(120.0f, hexSize_ + dz * 5.0f));
             animPos_.clear();
         }
+
         if (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Right) {
-            dragging_ = true; lastMouse_ = sf::Mouse::getPosition(window_);
+            dragging_ = true;
+            lastMouse_ = sf::Mouse::getPosition(window_);
         }
         if (e.type == sf::Event::MouseButtonReleased && e.mouseButton.button == sf::Mouse::Right) {
             dragging_ = false;
@@ -78,17 +84,41 @@ void UIApp::handleEvents() {
             lastMouse_ = cur;
             animPos_.clear();
         }
+
         if (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left) {
-            if (hoverAx_) {
-                if (selectedPid_ >= 0) {
-                    state_.movePiece(selectedPid_, *hoverAx_, /*allowStack=*/true);
+            // Compute axial under the cursor at click time (works for empty cells too)
+            sf::Vector2i mp = sf::Mouse::getPosition(window_);
+            sf::Vector2f world = sf::Vector2f(static_cast<float>(mp.x), static_cast<float>(mp.y)) - offset_;
+            hive::Axial clickAx = pixelToAxial(world, hexSize_);
+
+            if (selectedPid_ >= 0) {
+                // Deselect if clicking the same piece
+                auto it = state_.board().find(clickAx);
+                if (it != state_.board().end() && !it->second.empty() && it->second.back() == selectedPid_) {
                     selectedPid_ = -1;
+                    legalTargets_.clear();
                     animPos_.clear();
                 }
                 else {
-                    auto it = state_.board().find(*hoverAx_);
-                    if (it != state_.board().end() && !it->second.empty()) {
-                        selectedPid_ = it->second.back();
+                    // Move only to a legal (teal-ring) target — supports empty cells too
+                    auto isTarget = std::find_if(legalTargets_.begin(), legalTargets_.end(), [&](const hive::Axial& a) { return a.q == clickAx.q && a.r == clickAx.r; }) != legalTargets_.end();
+                    if (isTarget) {
+                        state_.movePiece(selectedPid_, clickAx, /*allowStack=*/true);
+                        selectedPid_ = -1;
+                        legalTargets_.clear();
+                        animPos_.clear();
+                    }
+                    // else: ignore click, keep selection
+                }
+            }
+            else {
+                // No selection yet: select top piece at click location, if any
+                auto it = state_.board().find(clickAx);
+                if (it != state_.board().end() && !it->second.empty()) {
+                    selectedPid_ = it->second.back();
+                    legalTargets_.clear();
+                    for (const auto& mv : legalMovesForPiece(state_, selectedPid_)) {
+                        legalTargets_.push_back(mv.to);
                     }
                 }
             }
@@ -97,10 +127,28 @@ void UIApp::handleEvents() {
 }
 
 void UIApp::update() {
-    // Update hover axial from mouse
+    if (!window_.hasFocus()) { hoverAx_.reset(); return; }
+
+    // Mouse in window coords -> world coords
     sf::Vector2i m = sf::Mouse::getPosition(window_);
-    sf::Vector2f world = sf::Vector2f(m.x, m.y) - offset_;
-    hoverAx_ = pixelToAxial(world, hexSize_);
+    sf::Vector2f world = sf::Vector2f(static_cast<float>(m.x), static_cast<float>(m.y)) - offset_;
+
+    // Find nearest existing board cell; only hover if close enough
+    std::optional<hive::Axial> best;
+    float bestDist2 = (hexSize_ * 0.85f) * (hexSize_ * 0.85f); // radius threshold^2
+
+    for (const auto& [pos, stack] : state_.board()) {
+        Pixel p = axialToPixel(pos, hexSize_);
+        float dx = world.x - static_cast<float>(p.x);
+        float dy = world.y - static_cast<float>(p.y);
+        float d2 = dx * dx + dy * dy;
+        if (d2 < bestDist2) {
+            bestDist2 = d2;
+            best = pos;
+        }
+    }
+
+    hoverAx_ = best; // clears when not near any tile
 }
 
 void UIApp::render() {
@@ -153,9 +201,21 @@ void UIApp::render() {
         }
     }
 
+    // Draw legal target rings (even on empty cells)
+    if (!legalTargets_.empty()) {
+        for (const auto& t : legalTargets_) {
+            Pixel p = axialToPixel(t, hexSize_);
+            auto ring = makeHex(hexSize_ * 0.92f);
+            ring.setPosition(offset_ + sf::Vector2f(p.x, p.y));
+            ring.setFillColor(sf::Color(0, 0, 0, 0));
+            ring.setOutlineThickness(3.0f);
+            ring.setOutlineColor(sf::Color(0, 180, 180)); // teal
+            window_.draw(ring);
+        }
+    }
+
     // Hover outline on empty cells too (when hovering an empty pos)
     if (hoverAx_) {
-        // Only draw the extra hover ring if nothing was drawn for selection above
         auto it = state_.board().find(*hoverAx_);
         bool hasSelectedHere = false;
         if (it != state_.board().end() && !it->second.empty()) {

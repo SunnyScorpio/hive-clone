@@ -4,13 +4,14 @@ project(hive LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Ensure build outputs are placed in a single bin/lib folder
+# Output folders (Windows)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # Options
 option(HIVE_BUILD_TESTS "Build unit tests" ON)
+option(HIVE_WARN_AS_ERRORS "Treat warnings as errors" OFF)
 
 # Dependencies via FetchContent
 include(FetchContent)
