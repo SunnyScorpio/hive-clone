@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <unordered_set>
 #include <cstdint>
+#include <array>
+#include <string>
 
 using namespace hive;
 
@@ -55,6 +57,9 @@ UIApp::UIApp() : window_(sf::VideoMode(1024, 768), "Hive (Desktop) – Kickstart",
 
     fontOk_ = font_.loadFromFile("assets/DejaVuSans.ttf");
     offset_ = sf::Vector2f(512.f, 384.f);
+
+    // initialize unplaced piece reserves based on base Hive counts minus current board
+    initReservesFromBoard();
 }
 
 void UIApp::run() {
@@ -90,10 +95,42 @@ void UIApp::handleEvents() {
         }
 
         if (e.type == sf::Event::MouseButtonPressed && e.mouseButton.button == sf::Mouse::Left) {
-            // Compute axial under the cursor at click time (works for empty cells too)
+            // First, check if click is on the side tray (screen-space hit test)
             sf::Vector2i mp = sf::Mouse::getPosition(window_);
+            sf::Vector2f screenPt(static_cast<float>(mp.x), static_cast<float>(mp.y));
+            hive::Color hitColor; hive::Bug hitBug;
+            if (hitTestTray(screenPt, hitColor, hitBug)) {
+                // arm pending placement if we have remaining pieces of that kind
+                auto& rem = (hitColor == hive::Color::White) ? remainingWhite_ : remainingBlack_;
+                if (rem[hitBug] > 0) {
+                    pendingPlace_ = std::make_pair(hitColor, hitBug);
+                    // compute fresh legal placement targets for this color
+                    legalTargets_ = computePlacementTargets(hitColor);
+                }
+                // stop processing this click
+                continue;
+            }
+
+            // Compute axial under the cursor at click time (works for empty cells too)
             sf::Vector2f world = sf::Vector2f(static_cast<float>(mp.x), static_cast<float>(mp.y)) - offset_;
             Axial clickAx = pixelToAxial(world, hexSize_);
+
+            if (pendingPlace_) {
+                // If a tray piece is armed, only allow placement onto a legal target
+                auto isTarget = std::find_if(legalTargets_.begin(), legalTargets_.end(),
+                    [&](const Axial& a) { return a.q == clickAx.q && a.r == clickAx.r; }) != legalTargets_.end();
+
+                if (isTarget) {
+                    auto [pc, pb] = *pendingPlace_;
+                    state_.addDemoPiece(pb, pc, clickAx);
+                    auto& rem = (pc == hive::Color::White) ? remainingWhite_ : remainingBlack_;
+                    if (rem[pb] > 0) rem[pb] -= 1;
+                    pendingPlace_.reset();
+                    legalTargets_.clear(); // rings will fade out via animation
+                }
+                // If not a legal target, ignore (keep pending)
+                continue;
+            }
 
             if (selectedPid_ >= 0) {
                 // Deselect if clicking the same piece
@@ -332,6 +369,122 @@ void UIApp::drawHoverOutline(sf::RenderTarget& rt, float baseSize) {
     rt.draw(h);
 }
 
+// ===== tray + placement =====
+void UIApp::initReservesFromBoard() {
+    auto seed = [&](std::unordered_map<hive::Bug, int>& m) {
+        m[hive::Bug::Queen] = 1; m[hive::Bug::Spider] = 2; m[hive::Bug::Beetle] = 2; m[hive::Bug::Grasshopper] = 3; m[hive::Bug::Ant] = 3;
+        };
+    seed(remainingWhite_); seed(remainingBlack_);
+
+    // subtract already-placed pieces from reserves
+    for (size_t pid = 0; pid < state_.pieces().size(); ++pid) {
+        const auto& p = state_.pieces()[pid];
+        auto& rem = (p.color == hive::Color::White) ? remainingWhite_ : remainingBlack_;
+        if (rem[p.bug] > 0) { rem[p.bug] -= 1; }
+    }
+}
+
+std::vector<hive::Axial> UIApp::computePlacementTargets(hive::Color /*c*/) const {
+    // Simplified base rule: any empty hex adjacent to the hive (no expansions / full constraints yet)
+    std::unordered_set<std::int64_t> uniq;
+    std::vector<hive::Axial> out;
+
+    if (state_.board().empty()) {
+        out.push_back({ 0,0 });
+        return out;
+    }
+    for (const auto& [pos, stack] : state_.board()) {
+        for (int i = 0; i < 6; ++i) {
+            Axial n = add(pos, dir(i));
+            if (!occupied(state_, n)) {
+                auto k = ringKey(n);
+                if (uniq.insert(k).second) out.push_back(n);
+            }
+        }
+    }
+    return out;
+}
+
+bool UIApp::hitTestTray(sf::Vector2f pt, hive::Color& outColor, hive::Bug& outBug) const {
+    for (const auto& it : trayItems_) {
+        if (it.rect.contains(pt)) {
+            outColor = it.color; outBug = it.bug; return true;
+        }
+    }
+    return false;
+}
+
+void UIApp::drawPieceTray(sf::RenderTarget& rt) {
+    trayItems_.clear();
+    const float panelW = 210.f;
+    const sf::Vector2u ws = window_.getSize();
+    const float x0 = static_cast<float>(ws.x) - panelW;
+    const float y0 = 12.f;
+    const float rowH = 34.f;
+    const float sectionGap = 12.f;
+
+    // panel background
+    sf::RectangleShape panel;
+    panel.setPosition(sf::Vector2f(x0, 0.f));
+    panel.setSize(sf::Vector2f(panelW, static_cast<float>(ws.y)));
+    panel.setFillColor(sf::Color(245, 245, 248, 230));
+    panel.setOutlineThickness(1.f);
+    panel.setOutlineColor(sf::Color(200, 200, 210));
+    rt.draw(panel);
+
+    auto drawSection = [&](hive::Color col, float& y) {
+        if (fontOk_) {
+            sf::Text t; t.setFont(font_);
+            t.setCharacterSize(16);
+            t.setString(col == hive::Color::White ? "White Reserve" : "Black Reserve");
+            t.setFillColor(sf::Color(60, 60, 70));
+            t.setPosition(x0 + 10.f, y);
+            rt.draw(t);
+        }
+        y += 22.f;
+
+        const std::array<hive::Bug, 5> order{ hive::Bug::Queen, hive::Bug::Spider, hive::Bug::Beetle, hive::Bug::Grasshopper, hive::Bug::Ant };
+        for (auto bug : order) {
+            int remaining = (col == hive::Color::White ? remainingWhite_.at(bug) : remainingBlack_.at(bug));
+            sf::FloatRect box(x0 + 10.f, y, panelW - 20.f, rowH);
+
+            // store hit rect
+            trayItems_.push_back({ box, col, bug });
+
+            sf::RectangleShape r; r.setPosition({ box.left, box.top }); r.setSize({ box.width, box.height });
+            r.setFillColor(sf::Color(255, 255, 255, remaining > 0 ? 255 : 120));
+            r.setOutlineThickness(1.f); r.setOutlineColor(sf::Color(190, 190, 200));
+            rt.draw(r);
+
+            if (fontOk_) {
+                char c = '?';
+        switch (bug) { case hive::Bug::Queen:c = 'Q'; break; case hive::Bug::Spider:c = 'S'; break; case hive::Bug::Beetle:c = 'B'; break; case hive::Bug::Grasshopper:c = 'G'; break; case hive::Bug::Ant:c = 'A'; break; }
+                                            sf::Text t; t.setFont(font_);
+                                            t.setCharacterSize(18);
+                                            t.setFillColor(sf::Color(30, 30, 35));
+                                            t.setString(std::string(1, c) + "  x" + std::to_string(remaining));
+                                            t.setPosition(box.left + 10.f, box.top + 6.f);
+                                            rt.draw(t);
+            }
+
+            if (pendingPlace_ && pendingPlace_->first == col && pendingPlace_->second == bug) {
+                sf::RectangleShape h; h.setPosition({ box.left, box.top }); h.setSize({ box.width, box.height });
+                h.setFillColor(sf::Color(0, 180, 180, 40));
+                h.setOutlineThickness(2.f); h.setOutlineColor(sf::Color(0, 180, 180, 180));
+                rt.draw(h);
+            }
+
+            y += rowH + 6.f;
+        }
+        y += sectionGap;
+        };
+
+    float y = y0;
+    drawSection(hive::Color::White, y);
+    drawSection(hive::Color::Black, y);
+}
+
+
 // ===== render orchestrator =====
 void UIApp::render() {
     window_.clear(sf::Color(250, 250, 252));
@@ -345,6 +498,7 @@ void UIApp::render() {
     drawPieceLabels(window_, baseSize);
     drawLegalTargets(window_, baseSize);
     drawHoverOutline(window_, baseSize);
+    drawPieceTray(window_);
 
     window_.display();
 }

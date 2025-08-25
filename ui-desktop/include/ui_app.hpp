@@ -32,14 +32,25 @@ private:
 	void drawLegalTargets(sf::RenderTarget& rt, float baseSize);
 	void drawHoverOutline(sf::RenderTarget& rt, float baseSize);
 
-
 	// ring animation helpers
 	static std::int64_t ringKey(hive::Axial a);
 	static hive::Axial axialFromKey(std::int64_t k);
 
+	// UI tray
+	void drawPieceTray(sf::RenderTarget& rt);
 
-	// data
+	// Placement / reserves
+	void initReservesFromBoard();
+	std::vector<hive::Axial> computePlacementTargets(hive::Color c) const;
+	bool hitTestTray(sf::Vector2f pt, hive::Color& outColor, hive::Bug& outBug) const;
 
+	struct TrayItem { sf::FloatRect rect; hive::Color color; hive::Bug bug; };
+	mutable std::vector<TrayItem> trayItems_;
+
+	// piece reserves and placement
+	std::unordered_map<hive::Bug, int> remainingWhite_;
+	std::unordered_map<hive::Bug, int> remainingBlack_;
+	std::optional<std::pair<hive::Color, hive::Bug>> pendingPlace_;
 
 	// data
 	sf::RenderWindow window_;
