@@ -9,6 +9,18 @@ This is a **fan project for educational purposes only**, not affiliated with or 
 
 ---
 
+## 💡 Why This Project Matters
+
+This project connects directly to my professional experience in **embedded software**, **UI/HMI frameworks**, and **C++ development**:
+
+- **C++20 + engine/UI separation** mirrors the design practices I used in automotive and medical HMI systems (Altia, Continental).  
+- **Rules engine + unit tests** demonstrate my ability to design reliable, testable core logic — critical in regulated domains like automotive and medical devices.  
+- **Hex-grid algorithms (BFS/DFS, connectivity checks)** showcase my ability to translate abstract requirements into concrete, efficient implementations.  
+- **Graphics/UI polish with SFML** highlights cross-platform graphics programming, similar to the rendering and modular HMI work I led at Altia.  
+- **Full game loop + turn enforcement** demonstrates end-to-end ownership: architecture, algorithms, UX, and testing.
+
+---
+
 ## ✨ Features
 - ✔️ **Complete ruleset** for base Hive (no expansions yet)  
   - Queen placement rule (must be placed by 4th turn)  
