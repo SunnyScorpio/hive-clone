@@ -22,4 +22,12 @@ namespace hive {
     bool occupied(const GameState& s, Axial a);
     int  stackHeight(const GameState& s, Axial a);
 
+    // Add near the other helpers
+    bool queenSurrounded(const GameState& s, Color c);
+
+    // If both queens are surrounded at once -> draw
+    enum class GameOver { None, WhiteWins, BlackWins, Draw };
+    GameOver evaluateGameOver(const GameState& s);
+
+
 }

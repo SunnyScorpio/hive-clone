@@ -16,7 +16,7 @@ constexpr float kRate = 0.20f; // smoothing factor per frame
 // ===== helpers =====
 sf::ConvexShape UIApp::makeHex(float size) {
     sf::ConvexShape hex; hex.setPointCount(6);
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < kHexDirCount; ++i) {
         float angle = static_cast<float>(std::numbers::pi) / 180.0f * (60.0f * static_cast<float>(i) - 30.0f);
         hex.setPoint(i, sf::Vector2f(
             static_cast<float>(std::cos(angle) * size),
@@ -74,6 +74,13 @@ void UIApp::run() {
 void UIApp::handleEvents() {
     sf::Event e;
     while (window_.pollEvent(e)) {
+
+        if (gameOver_) {
+            // Still process Closed / Resized, but ignore gameplay input
+            if (e.type == sf::Event::Closed) window_.close();
+            continue;
+        }
+
         if (e.type == sf::Event::KeyPressed && e.key.code == sf::Keyboard::Escape) {
             pendingPlace_.reset();
             selectedPid_ = -1;
@@ -141,6 +148,11 @@ void UIApp::handleEvents() {
                     state_.addDemoPiece(pb, pc, clickAx);
                     auto& rem = (pc == hive::Color::White) ? remainingWhite_ : remainingBlack_;
                     if (rem[pb] > 0) rem[pb] -= 1;
+                    auto go = evaluateGameOver(state_);
+                    if (go != hive::GameOver::None) {
+                        gameOver_ = true;
+                        gameOverState_ = go;
+                    }
                     pendingPlace_.reset();
                     legalTargets_.clear(); // rings will fade out via animation
                     // switch turn after a successful placement
@@ -171,6 +183,12 @@ void UIApp::handleEvents() {
                         }
                         else {
                             state_.movePiece(selectedPid_, clickAx, /*allowStack=*/true);
+                            // ... after state_.movePiece(...)
+                            auto go = evaluateGameOver(state_);
+                            if (go != hive::GameOver::None) {
+                                gameOver_ = true;
+                                gameOverState_ = go;
+                            }
                             selectedPid_ = -1;
                             legalTargets_.clear();
                             // switch turn after a successful move
@@ -251,7 +269,7 @@ void UIApp::update() {
         if (!state_.board().empty()) {
             bright.reserve(state_.board().size() * 3);
             for (const auto& [pos, stack] : state_.board()) {
-                for (int i = 0; i < 6; ++i) {
+                for (int i = 0; i < kHexDirCount; ++i) {
                     Axial n = add(pos, dir(i));
                     if (!occupied(state_, n)) {
                         bright.insert(ringKey(n));
@@ -515,7 +533,7 @@ int UIApp::placementsMade(hive::Color c) const {
 }
 
 bool UIApp::adjacentToColor(hive::Axial a, hive::Color c) const {
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < kHexDirCount; ++i) {
         Axial n = add(a, dir(i));
         auto it = state_.board().find(n);
         if (it != state_.board().end() && !it->second.empty()) {
@@ -545,7 +563,7 @@ std::vector<hive::Axial> UIApp::computePlacementTargets(hive::Color c) const {
     std::vector<hive::Axial> candidates;
     candidates.reserve(state_.board().size() * 3);
     for (const auto& [pos, stack] : state_.board()) {
-        for (int i = 0; i < 6; ++i) {
+        for (int i = 0; i < kHexDirCount; ++i) {
             Axial n = add(pos, dir(i));
             if (!occupied(state_, n)) {
                 auto k = ringKey(n);
@@ -756,6 +774,35 @@ void UIApp::render() {
     // --- overlays ---
     drawOverlay("Must place Queen by 4th turn!", sf::Color(255, 0, 0), queenWarningTimer_, OVERLAY_Q_BY4_SEC);
     drawOverlay("Place your Queen before moving.", sf::Color(255, 80, 0), moveBeforeQueenTimer_, OVERLAY_MOVE_BEFORE_Q_SEC, 44.f);
+
+    if (gameOver_ && fontOk_) {
+        std::string msg = "Draw!";
+        if (gameOverState_.has_value()) {
+            if (*gameOverState_ == hive::GameOver::WhiteWins) msg = "White wins!";
+            else if (*gameOverState_ == hive::GameOver::BlackWins) msg = "Black wins!";
+            else msg = "Draw!";
+        }
+
+        sf::Text t; t.setFont(font_); t.setCharacterSize(36);
+        t.setString("Game Over! " + msg);
+        auto b = t.getLocalBounds();
+        float cx = (window_.getSize().x - b.width) / 2.f;
+        float cy = (window_.getSize().y - b.height) / 2.f;
+        t.setPosition(cx, cy);
+        t.setFillColor(sf::Color::White);
+
+        sf::RectangleShape bg;
+        float pad = 14.f;
+        bg.setPosition(cx - pad, cy - pad);
+        bg.setSize({ b.width + 2 * pad, b.height + 3 * pad });
+        bg.setFillColor(sf::Color(0, 0, 0, 180));
+        bg.setOutlineThickness(2.f);
+        bg.setOutlineColor(sf::Color(255, 255, 255, 80));
+
+        window_.draw(bg);
+        window_.draw(t);
+    }
+
 
     window_.display();
 }

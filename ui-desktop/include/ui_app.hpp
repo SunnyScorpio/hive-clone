@@ -68,6 +68,9 @@ private:
 	// data
 	sf::RenderWindow window_;
 	hive::GameState state_;
+	bool gameOver_{ false };
+	std::optional<hive::GameOver> gameOverState_;
+
 
 	float hexSize_{ 40.0f };
 	sf::Font font_; bool fontOk_{ false };

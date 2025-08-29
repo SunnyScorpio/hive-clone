@@ -55,4 +55,6 @@ namespace hive {
     struct Pixel { float x{}, y{}; };
     Pixel axialToPixel(Axial a, float hexSize);
 
+    constexpr int kHexDirCount = 6;  // number of neighbor directions in a hex grid
+
 } // namespace hive

@@ -1,21 +1,101 @@
-# hive-clone (Unofficial Implementation)
+# 🐝 Hive Clone (C++20 + SFML)
 
-An educational, open-source C++ implementation of the abstract strategy game *Hive*.  
-This version demonstrates:
-- **C++20 rules engine** (graph traversal, connectivity checks, do/undo)
-- **Unit tests** with GoogleTest
-- **Native desktop UI** built with SFML
-- Modular design for future **AI search** and **web (WASM) frontend**
+A complete, open-source **unofficial implementation** of the award-winning board game *Hive*, built in modern **C++20** with a custom rules engine and an SFML desktop UI.
 
-## Build
+![Hive Gameplay Demo](assets/queen_placements.gif)
+
+⚠️ **Disclaimer**: Hive is a copyrighted board game by Gen42 Games.  
+This is a **fan project for educational purposes only**, not affiliated with or endorsed by Gen42.
+
+---
+
+## ✨ Features
+- ✔️ **Complete ruleset** for base Hive (no expansions yet)  
+  - Queen placement rule (must be placed by 4th turn)  
+  - Turn order enforced (White → Black → White …)  
+  - Legal moves: Queen slide, Grasshopper jumps, Ant BFS sliding, Spider 3-step DFS, Beetle climb & stacking  
+  - Game over when a queen is fully surrounded (draws supported)  
+- ✔️ **Piece tray** with remaining counts  
+- ✔️ **Animated feedback**: teal rings for legal moves, hover gold outline, blue selected outline  
+- ✔️ **Smooth zoom & pan** with anti-aliased hex grid  
+- ✔️ **Unit tests** (GoogleTest) for all pieces + connectivity checks  
+
+---
+
+## 🕹️ Gameplay
+
+### Piece Placement
+![Placing Pieces](assets/hive_placement.gif)
+
+### Piece Movement
+![Legal Moves](assets/piece_movement.gif)
+
+### Game Over
+![Game Over](assets/hive_gameover.gif)
+
+---
+
+## ⚙️ Build Instructions (Windows)
+
 ```bash
-mkdir build && cd build
-cmake ..
-cmake --build . -j
+# clone
+git clone https://github.com/<yourusername>/hive-clone.git
+cd hive-clone
+
+# configure (with tests enabled)
+cmake -S . -B build -DHIVE_BUILD_TESTS=ON
+
+# build (Debug or Release)
+cmake --build build --config Debug
+
+# run
+build/bin/Debug/hive_desktop.exe
 ```
 
-Disclaimer
-This project is an unofficial, open-source implementation of the rules of the board game Hive, created by John Yianni and published by Gen42 Games.
-It is provided for educational and non-commercial purposes only.
-All artwork, logos, and trademarks associated with the official Hive game remain the property of their respective owners.
-This repository contains original code and graphics and is not affiliated with, endorsed, or sponsored by Gen42 Games.
+## 🧪 Running Tests
+```bash
+ctest --test-dir build -C Debug --output-on-failure
+```
+
+Unit tests cover:
+
+- Queen moves
+- Grasshopper jumps
+- Ant sliding (bounded BFS)
+- Spider exactly 3 steps (DFS)
+- Beetle climb/slide
+- Hive connectivity + queen surrounded
+
+## 🔍 Technical Highlights
+
+- C++20 features: structured bindings, lambdas, std::optional, unordered_map
+
+- Hex-grid algorithms: BFS/DFS, hive connectivity checks
+
+- SFML rendering: hardware-accelerated 2D graphics with anti-aliased hex grid
+
+- Clean architecture: separated engine, rules, and UI layers
+
+- Unit testing culture: GoogleTest integrated into the build
+
+- CMake build system with FetchContent for dependencies
+
+## 🚀 Roadmap
+
+- Hive expansions (Ladybug, Mosquito, Pillbug)
+
+- Simple AI opponent (minimax with heuristics)
+
+- Online multiplayer (networking)
+
+- Save/load game state
+
+- Web build (Emscripten) or mobile port
+
+## 📜 License
+
+This project is licensed under the [MIT License](LICENSE).  
+See the full text at [opensource.org/licenses/MIT](https://opensource.org/licenses/MIT).
+
+⚠️ *Reminder: Hive is a copyrighted board game by Gen42 Games.  
+This is an unofficial, fan-made clone created for educational purposes only.*
